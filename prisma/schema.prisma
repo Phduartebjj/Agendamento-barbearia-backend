@@ -5,3 +5,32 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+enum DuracaoCorte {
+  MIN_15
+  MIN_30
+  MIN_45
+  MIN_60
+}
+
+enum StatusAgendamento {
+  AGENDADO
+  CANCELADO
+  CONCLUIDO
+}
+
+enum DiaSemana {
+  SEGUNDA
+  TERCA
+  QUARTA
+  QUINTA
+  SEXTA
+  SABADO
+  DOMINGO
+}
+
+enum MotivoBloqueio {
+  ALMOCO
+  COMPROMISSO
+  OUTRO
+}
