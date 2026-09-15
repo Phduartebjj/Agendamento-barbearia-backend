@@ -20,8 +20,8 @@ O MVP contempla:
 - Agendamento online pelo cliente.
 - Visualização de datas e horários disponíveis.
 - Agenda baseada em horários configurados pelo barbeiro.
-- Duração fixa de **30 minutos por corte**.
-- Intervalo entre atendimentos configurável pelo barbeiro.
+- Duração do corte configurável por barbeiro, usando os valores `15_MIN`, `30_MIN`, `45_MIN` ou `60_MIN`.
+- Intervalo entre atendimentos configurável por barbeiro, em minutos. O intervalo pode ser `0` ou qualquer valor inteiro não negativo.
 - Configuração dos dias de funcionamento.
 - Configuração dos horários de funcionamento por dia.
 - Bloqueio de períodos específicos pelo barbeiro.
@@ -39,11 +39,16 @@ O MVP contempla:
 
 ### 3.1 Duração do corte
 
-A duração de cada corte é fixa em:
+A duração do corte é uma configuração individual do barbeiro. Os valores permitidos serão padronizados por ENUM:
 
-**30 minutos.**
+```text
+15_MIN
+30_MIN
+45_MIN
+60_MIN
+```
 
-Essa duração não deve ser alterada pela configuração de intervalo.
+A duração do corte é independente do intervalo entre atendimentos.
 
 Exemplo:
 
@@ -179,6 +184,7 @@ Não existe uma antecedência mínima específica para realizar o agendamento.
 Para realizar um agendamento, o cliente deverá informar:
 
 - Nome;
+- Sobrenome;
 - Telefone.
 
 ### 5.3 Múltiplos agendamentos
@@ -235,7 +241,7 @@ O atendimento foi realizado e marcado como concluído pelo barbeiro.
 
 ## 7. Painel do barbeiro
 
-O barbeiro terá acesso a uma área administrativa.
+O barbeiro terá acesso a uma área administrativa. A autenticação do barbeiro será feita por Google, utilizando um `googleId` único para identificar sua conta.
 
 No painel, ele deverá conseguir:
 
@@ -248,7 +254,6 @@ No painel, ele deverá conseguir:
 - Definir o intervalo entre atendimentos;
 - Bloquear períodos específicos da agenda.
 
-A autenticação do painel administrativo ainda deve ser definida na implementação.
 
 ---
 
@@ -268,24 +273,23 @@ Um horário somente poderá ser considerado disponível quando:
 6. O agendamento respeitar as regras de antecedência;
 7. No caso de alteração/cancelamento, forem respeitados os 20 minutos de antecedência.
 
-O sistema também deve impedir conflitos/double booking entre agendamentos.
+O sistema também deve impedir conflitos/double booking entre agendamentos. Para isso, a regra de integridade será: um barbeiro não pode possuir mais de um agendamento `AGENDADO` para a mesma combinação de `data + horario`. Agendamentos `CANCELADO` permanecem no histórico e não devem impedir que o horário seja reservado novamente.
 
 ---
 
-## 9. Modelo conceitual inicial
+## 9. Modelo conceitual
 
-As principais entidades previstas são:
-
-### Cliente
+### 9.1 Cliente
 
 Representa a pessoa que realiza os agendamentos.
 
-Campos inicialmente previstos:
-
 ```text
-id
-nome
-telefone
+Cliente
+├── id         → UUID, PK
+├── nome       → VARCHAR, NOT NULL
+├── sobrenome  → VARCHAR, NOT NULL
+├── telefone   → VARCHAR, NOT NULL
+└── googleId   → VARCHAR, NOT NULL, UNIQUE
 ```
 
 Relacionamento:
@@ -294,42 +298,59 @@ Relacionamento:
 Cliente 1:N Agendamento
 ```
 
-Um cliente pode possuir vários agendamentos.
+Um cliente pode possuir vários agendamentos futuros.
 
-### Barbeiro
+### 9.2 Barbeiro
 
 Representa o profissional responsável pelos atendimentos.
 
-Campos inicialmente previstos:
-
 ```text
-id
-nome
+Barbeiro
+├── id             → UUID, PK
+├── nome           → VARCHAR, NOT NULL
+├── sobrenome      → VARCHAR, NOT NULL
+├── telefone       → VARCHAR, NOT NULL, UNIQUE
+├── googleId       → VARCHAR, NOT NULL, UNIQUE
+├── duracao_corte  → ENUM, NOT NULL
+└── intervalo      → INTEGER, NOT NULL
 ```
+
+`duracao_corte` aceita `15_MIN`, `30_MIN`, `45_MIN` ou `60_MIN`.
+
+`intervalo` representa a pausa entre o fim de um corte e o início do próximo e deve ser um número inteiro não negativo.
 
 Relacionamentos:
 
 ```text
 Barbeiro 1:N Agendamento
 Barbeiro 1:N Bloqueio
+Barbeiro 1:N HorarioTrabalho
+Barbeiro 1:N ExcecaoHorario
 ```
 
-Mesmo existindo inicialmente apenas um barbeiro, a estrutura poderá considerar `barbeiro_id` nos registros relacionados para facilitar uma futura expansão para múltiplos barbeiros.
+Mesmo existindo inicialmente apenas um barbeiro, a estrutura utiliza `barbeiro_id` nos registros relacionados para permitir a futura expansão para múltiplos barbeiros.
 
-### Agendamento
+### 9.3 Agendamento
 
 Representa uma reserva feita por um cliente.
 
-Campos inicialmente previstos:
+```text
+Agendamento
+├── id          → UUID, PK
+├── cliente_id  → UUID, FK, NOT NULL
+├── barbeiro_id → UUID, FK, NOT NULL
+├── data        → DATE, NOT NULL
+├── horario     → TIME, NOT NULL
+├── status      → ENUM, NOT NULL
+└── criado_em   → TIMESTAMP, NOT NULL
+```
+
+Status:
 
 ```text
-id
-cliente_id
-barbeiro_id
-data
-horario
-status
-criado_em
+AGENDADO
+CANCELADO
+CONCLUIDO
 ```
 
 Relacionamentos:
@@ -339,22 +360,109 @@ Agendamento N:1 Cliente
 Agendamento N:1 Barbeiro
 ```
 
-### Bloqueio
+Regra de integridade principal:
+
+> Para `status = AGENDADO`, a combinação `barbeiro_id + data + horario` deve ser única. Agendamentos cancelados permanecem no banco e não ocupam novamente o horário.
+
+### 9.4 Bloqueio
 
 Representa um período em que o barbeiro não estará disponível para atendimento.
 
-Campos inicialmente previstos:
-
 ```text
-id
-barbeiro_id
-data
-horario
-motivo (opcional)
-criado_em
+Bloqueio
+├── id             → UUID, PK
+├── barbeiro_id    → UUID, FK, NOT NULL
+├── data           → DATE, NOT NULL
+├── horario_inicio → TIME, NOT NULL
+├── horario_fim    → TIME, NOT NULL
+├── motivo         → ENUM, NOT NULL
+└── criado_em      → TIMESTAMP, NOT NULL
 ```
 
-O bloqueio deve ser uma entidade separada de `Agendamento`, pois não existe cliente associado a um bloqueio.
+Valores de `motivo`:
+
+```text
+ALMOCO
+COMPROMISSO
+OUTRO
+```
+
+O bloqueio é uma entidade separada de `Agendamento`, pois não existe cliente associado a ele.
+
+### 9.5 HorarioTrabalho
+
+Representa o horário semanal padrão do barbeiro.
+
+```text
+HorarioTrabalho
+├── id             → UUID, PK
+├── barbeiro_id    → UUID, FK, NOT NULL
+├── dia_semana     → ENUM, NOT NULL
+├── horario_inicio → TIME, NOT NULL
+├── horario_fim    → TIME, NOT NULL
+└── ativo          → BOOLEAN, NOT NULL
+```
+
+`dia_semana` utiliza os valores:
+
+```text
+SEGUNDA
+TERCA
+QUARTA
+QUINTA
+SEXTA
+SABADO
+DOMINGO
+```
+
+Regra: um barbeiro possui no máximo uma configuração para cada dia da semana. Se o barbeiro alterar a configuração de um dia, o registro existente deve ser atualizado em vez de criar outro.
+
+Constraint correspondente:
+
+```text
+UNIQUE (barbeiro_id, dia_semana)
+```
+
+### 9.6 ExcecaoHorario
+
+Representa uma alteração específica na jornada para uma determinada data, sem alterar a configuração semanal.
+
+```text
+ExcecaoHorario
+├── id             → UUID, PK
+├── barbeiro_id    → UUID, FK, NOT NULL
+├── data           → DATE, NOT NULL
+├── horario_inicio → TIME, NOT NULL
+├── horario_fim    → TIME, NOT NULL
+└── ativo          → BOOLEAN, NOT NULL
+```
+
+Regra: um barbeiro possui no máximo uma exceção para cada data. Se a exceção de uma data for alterada, o registro existente deve ser atualizado.
+
+Constraint correspondente:
+
+```text
+UNIQUE (barbeiro_id, data)
+```
+
+Uma exceção com `ativo = false` representa um dia de folga específico. Nesse caso, os horários armazenados são ignorados.
+
+---
+
+## 9.7 Regras de integridade das entidades
+
+As seguintes regras devem ser garantidas pelo banco ou pela camada de aplicação, conforme a natureza da regra:
+
+1. `HorarioTrabalho`: `horario_fim` deve ser maior que `horario_inicio`.
+2. `ExcecaoHorario`: `horario_fim` deve ser maior que `horario_inicio` quando a exceção estiver ativa.
+3. `Bloqueio`: `horario_fim` deve ser maior que `horario_inicio`.
+4. `Barbeiro`: `intervalo` deve ser maior ou igual a `0`.
+5. `HorarioTrabalho`: `barbeiro_id + dia_semana` é único.
+6. `ExcecaoHorario`: `barbeiro_id + data` é único.
+7. `Agendamento`: `barbeiro_id + data + horario` é único entre registros com status `AGENDADO`.
+8. Agendamentos cancelados não devem ser excluídos automaticamente, pois fazem parte do histórico.
+9. A exclusão de um `Cliente` ou `Barbeiro` não deve apagar automaticamente seus agendamentos históricos.
+10. Ao excluir um `Barbeiro`, registros de `Bloqueio`, `HorarioTrabalho` e `ExcecaoHorario` podem ser removidos em cascata, pois são configurações dependentes do barbeiro.
 
 ---
 
@@ -371,7 +479,7 @@ Horário padrão:
 12:00–18:00
 
 Duração do corte:
-30 minutos
+30 minutos (exemplo)
 
 Intervalo:
 15 minutos
@@ -445,7 +553,7 @@ Pode bloquear períodos específicos
 
 | Decisão | Regra |
 |---|---|
-| Duração do corte | 30 minutos |
+| Duração do corte | Configurável por barbeiro (`15_MIN`, `30_MIN`, `45_MIN`, `60_MIN`) |
 | Intervalo | Configurável pelo barbeiro |
 | Dias de funcionamento | Configuráveis pelo barbeiro |
 | Horários de funcionamento | Configuráveis pelo barbeiro |
@@ -458,13 +566,15 @@ Pode bloquear períodos específicos
 | Alteração | Até 20 min antes |
 | Cancelamento | Até 20 min antes |
 | Múltiplos agendamentos por cliente | Permitido |
-| Dados do cliente | Nome + telefone |
+| Dados do cliente | Nome + sobrenome + telefone |
 | Conclusão do atendimento | Sim |
 | Histórico de cancelamentos | Mantido |
+| Autenticação do cliente | Google antes de finalizar o agendamento |
+| Autenticação do barbeiro | Google |
 | Painel administrativo | Sim |
-| Múltiplos barbeiros | Futuro, mas arquitetura pode ser preparada |
+| Múltiplos barbeiros | Futuro, com `barbeiro_id` já presente na modelagem |
 | Catálogo de serviços | Futuro |
-| Duração variável por serviço | Futuro |
+| Duração variável por serviço | Futuro; atualmente a duração é individual por barbeiro |
 
 ---
 
@@ -476,8 +586,6 @@ Estas funcionalidades podem ser adicionadas posteriormente, sem fazer parte do p
 - Catálogo de serviços;
 - Serviços com preços diferentes;
 - Serviços com durações diferentes;
-- Login do cliente;
-- Login com Google para clientes;
 - Notificações automáticas;
 - Integração com WhatsApp;
 - Relatórios;
