@@ -1,0 +1,118 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum DuracaoCorte {
+  MIN_15
+  MIN_30
+  MIN_45
+  MIN_60
+}
+
+enum StatusAgendamento {
+  AGENDADO
+  CANCELADO
+  CONCLUIDO
+}
+
+enum DiaSemana {
+  SEGUNDA
+  TERCA
+  QUARTA
+  QUINTA
+  SEXTA
+  SABADO
+  DOMINGO
+}
+
+enum MotivoBloqueio {
+  ALMOCO
+  COMPROMISSO
+  OUTRO
+}
+
+model Cliente {
+  id        String @id @default(uuid()) @db.Uuid
+  nome      String
+  sobrenome String
+  telefone  String
+  googleId  String @unique
+
+  agendamentos Agendamento[]
+}
+
+model Barbeiro {
+  id            String       @id @default(uuid()) @db.Uuid
+  nome          String
+  sobrenome     String
+  telefone      String       @unique
+  googleId      String       @unique
+  duracao_corte DuracaoCorte
+  intervalo     Int
+
+  agendamentos      Agendamento[]
+  bloqueios         Bloqueio[]
+  horarios_trabalho HorarioTrabalho[]
+  excecoes_horario  ExcecaoHorario[]
+}
+
+model Agendamento {
+  id          String            @id @default(uuid()) @db.Uuid
+  cliente_id  String            @db.Uuid
+  barbeiro_id String            @db.Uuid
+  data        DateTime          @db.Date
+  horario     DateTime          @db.Time
+  status      StatusAgendamento
+  criado_em   DateTime          @default(now())
+
+  cliente  Cliente  @relation(fields: [cliente_id], references: [id], onDelete: Restrict)
+  barbeiro Barbeiro @relation(fields: [barbeiro_id], references: [id], onDelete: Restrict)
+
+  @@index([barbeiro_id, data, horario])
+  @@index([cliente_id, data])
+}
+
+model Bloqueio {
+  id             String         @id @default(uuid()) @db.Uuid
+  barbeiro_id    String         @db.Uuid
+  data           DateTime       @db.Date
+  horario_inicio DateTime       @db.Time
+  horario_fim    DateTime       @db.Time
+  motivo         MotivoBloqueio
+  criado_em      DateTime       @default(now())
+
+  barbeiro Barbeiro @relation(fields: [barbeiro_id], references: [id], onDelete: Cascade)
+
+  @@index([barbeiro_id, data])
+}
+
+model HorarioTrabalho {
+  id             String    @id @default(uuid()) @db.Uuid
+  barbeiro_id    String    @db.Uuid
+  dia_semana     DiaSemana
+  horario_inicio DateTime  @db.Time
+  horario_fim    DateTime  @db.Time
+  ativo          Boolean
+
+  barbeiro Barbeiro @relation(fields: [barbeiro_id], references: [id], onDelete: Cascade)
+
+  @@unique([barbeiro_id, dia_semana])
+}
+
+model ExcecaoHorario {
+  id             String   @id @default(uuid()) @db.Uuid
+  barbeiro_id    String   @db.Uuid
+  data           DateTime @db.Date
+  horario_inicio DateTime @db.Time
+  horario_fim    DateTime @db.Time
+  ativo          Boolean
+
+  barbeiro Barbeiro @relation(fields: [barbeiro_id], references: [id], onDelete: Cascade)
+
+  @@unique([barbeiro_id, data])
+}
