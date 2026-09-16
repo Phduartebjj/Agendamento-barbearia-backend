@@ -11,6 +11,9 @@
   "author": "",
   "license": "ISC",
   "type": "module",
+  "[prisma]": {
+    "editor.formatOnSave": true
+  },
   "dependencies": {
     "@prisma/client": "^7.10.0",
     "express": "^5.2.1",
