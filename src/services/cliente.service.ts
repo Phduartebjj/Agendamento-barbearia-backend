@@ -21,3 +21,11 @@ export async function criarCliente(dados: CriarClienteDTO) {
     throw error;
   }
 }
+
+export async function buscarClientePorId(id: string) {
+  return await prisma.cliente.findUnique({
+    where: {
+      id,
+    },
+  });
+}

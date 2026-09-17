@@ -14,8 +14,12 @@ export const criarClienteSchema = z.object({
     .max(100, "Sobrenome deve ter no máximo 100 caracteres"),
 
   telefone: z.string().regex(/^\+[1-9]\d{7,14}$/, "Telefone inválido"),
-  
+
   googleId: z.string().trim().min(1, "Google ID é obrigatório"),
 });
 
 export type CriarClienteDTO = z.infer<typeof criarClienteSchema>;
+
+export const buscarClienteSchema = z.object({
+  id: z.uuid("ID do cliente inválido"),
+});
